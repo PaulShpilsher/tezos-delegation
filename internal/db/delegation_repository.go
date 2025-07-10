@@ -12,7 +12,6 @@ import (
 //
 //go:generate mockgen -destination=../mocks/mock_delegation_repository.go -package=mocks tezos-delegation/internal/db DelegationRepositoryInterface
 type DelegationRepositoryInterface interface {
-	InsertDelegation(d *model.Delegation) error
 	InsertDelegations(delegations []*model.Delegation) error
 	GetLatestTzktID(ctx context.Context) (int64, error)
 	ListDelegations(ctx context.Context, limit, offset int, year *int) ([]model.Delegation, error)
@@ -24,16 +23,6 @@ type DelegationRepository struct {
 
 func NewDelegationRepository(db *sql.DB) *DelegationRepository {
 	return &DelegationRepository{db: db}
-}
-
-func (r *DelegationRepository) InsertDelegation(d *model.Delegation) error {
-	_, err := r.db.Exec(`
-		INSERT INTO delegations (tzkt_id, timestamp, amount, delegator, level)
-		VALUES ($1, $2, $3, $4, $5)
-		ON CONFLICT (tzkt_id) DO NOTHING
-	`, d.TzktID, d.Timestamp, d.Amount, d.Delegator, d.Level)
-
-	return err
 }
 
 func (r *DelegationRepository) InsertDelegations(delegations []*model.Delegation) (err error) {
