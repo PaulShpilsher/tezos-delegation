@@ -12,52 +12,89 @@ import (
 	"syscall"
 	"time"
 
+	"database/sql"
+
 	"github.com/kataras/iris/v12"
 	"github.com/rs/zerolog"
 )
 
+// main is the entry point for the Tezos Delegation service.
+// It sets up configuration, database, services, HTTP server, poller, and graceful shutdown.
 func main() {
-	// Initialize zerolog logger
-	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
-	logger := zerolog.New(os.Stdout).With().Timestamp().Logger()
+	// --- Logger Setup ---
+	logger := setupLogger()
 
-	// Load configuration
+	// --- Config Load ---
+	cfg := mustLoadConfig(logger)
+
+	// --- Database Init ---
+	dbConn := mustInitDB(cfg.DBUrl, logger)
+	defer dbConn.Close()
+
+	// --- Service and Handler Wiring ---
+	delegationRepo := db.NewDelegationRepository(dbConn)
+	pollerService := services.NewPoller(delegationRepo, logger)
+	delegationService := services.NewDelegationService(delegationRepo, logger)
+	delegationHandler := api.NewDelegationHandler(delegationService, logger)
+
+	// --- HTTP Server Setup ---
+	app := setupHTTPServer(delegationHandler)
+
+	// --- Signal Handling ---
+	quit := setupSignalHandler()
+
+	// --- Poller Start ---
+	pollerCtx, cancelPoller := context.WithCancel(context.Background())
+	defer cancelPoller()
+	pollerService.Start(pollerCtx)
+
+	// --- HTTP Server Start ---
+	go startHTTPServer(app, cfg.ServerPort, logger)
+
+	// --- Graceful Shutdown ---
+	waitForShutdown(quit, app, pollerService, cancelPoller, logger)
+}
+
+func setupLogger() zerolog.Logger {
+	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
+	return zerolog.New(os.Stdout).With().Timestamp().Logger()
+}
+
+func mustLoadConfig(logger zerolog.Logger) *config.Config {
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		logger.Fatal().Err(err).Msg("Load config error")
 	}
+	return cfg
+}
 
-	// Initialize database connection
-	dbConn, err := db.NewDBConnectionFromDSN(cfg.DBUrl)
+func mustInitDB(dsn string, logger zerolog.Logger) *sql.DB {
+	dbConn, err := db.NewDBConnectionFromDSN(dsn)
 	if err != nil {
 		logger.Fatal().Err(err).Msg("Database connection error")
 	}
-	defer dbConn.Close()
+	return dbConn
+}
 
-	// Initialize repositories and services
-	delegationRepo := db.NewDelegationRepository(dbConn)
-	pollerService := services.NewPoller(delegationRepo, logger)
-	delegationService := services.NewDelegationService(delegationRepo)
-	delegationHandler := api.NewDelegationHandler(delegationService, logger)
-
+func setupHTTPServer(delegationHandler *api.DelegationHandler) *iris.Application {
 	app := iris.New()
-	api.RegisterRoutes(app, api.RouterDeps{DelegationHandler: delegationHandler})
+	api.RegisterRoutes(app, delegationHandler)
+	return app
+}
 
-	// Graceful shutdown setup
+func setupSignalHandler() chan os.Signal {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	return quit
+}
 
-	// Start Poller
-	ctx, cancelPoller := context.WithCancel(context.Background())
-	defer cancelPoller()
-	pollerService.Start(ctx)
+func startHTTPServer(app *iris.Application, port string, logger zerolog.Logger) {
+	if err := app.Listen(":"+port, iris.WithoutInterruptHandler); err != nil {
+		logger.Fatal().Err(err).Msg("HTTP server error")
+	}
+}
 
-	go func() {
-		if err := app.Listen(":"+cfg.ServerPort, iris.WithoutInterruptHandler); err != nil {
-			logger.Fatal().Err(err).Msg("HTTP server error")
-		}
-	}()
-
+func waitForShutdown(quit <-chan os.Signal, app *iris.Application, pollerService *services.Poller, cancelPoller context.CancelFunc, logger zerolog.Logger) {
 	<-quit
 	app.Logger().Info("Shutting down server...")
 
