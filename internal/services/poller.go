@@ -54,6 +54,7 @@ func (p *Poller) Start(ctx context.Context) {
 // then switches to periodic polling for new data every minute, catching up if behind.
 func (p *Poller) syncAndPoll(ctx context.Context) {
 	// 1. Historical sync: fast as possible within rate limits
+	log.Println("[poller] sync historical data")
 	for {
 		caughtUp, err := p.syncDelegationsBatch(ctx)
 		if err != nil {
@@ -67,6 +68,7 @@ func (p *Poller) syncAndPoll(ctx context.Context) {
 	}
 
 	// 2. Polling: every minute, but catch up if behind
+	log.Println("[poller] synced.  polling for new data")
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
 	for {
@@ -94,14 +96,19 @@ func (p *Poller) syncDelegationsBatch(ctx context.Context) (bool, error) {
 	// Get last stored delegaton TztkID
 	lastTzktID, err := p.repo.GetLatestTzktID(ctx)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error getting latest TzktID from database: %w", err)
 	}
+
+	log.Printf("[poller] fetching delegations with latest TzktID %d", lastTzktID)
 
 	// Get a block of delegations from Tztk API
 	delegations, err := p.fetchDelegationBatch(ctx, lastTzktID)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error fetching delegations from tzkt: %w", err)
+
 	}
+
+	log.Printf("[poller] fetched %d delegations", len(delegations))
 	if len(delegations) == 0 {
 		return true, nil // caught up
 	}
@@ -114,7 +121,7 @@ func (p *Poller) syncDelegationsBatch(ctx context.Context) (bool, error) {
 
 	err = p.repo.InsertDelegations(delegationPtrs)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error storing delegations ro database: %w", err)
 	}
 	return len(delegations) < pageSize, nil // caught up if less than a full page
 }
@@ -144,7 +151,9 @@ func parseRetryAfter(header string) (time.Duration, error) {
 // - Enforces a maximum number of retries and a maximum total wait time.
 // - All network and retry waits are cancellable via the provided context.
 func (p *Poller) fetchDelegationBatch(ctx context.Context, lastID int64) ([]model.Delegation, error) {
+
 	url := fmt.Sprintf("%s?limit=%d&id.gt=%d", tzktBaseURL, pageSize, lastID)
+
 	var resp *http.Response
 	var err error
 	backoff := initialBackoff
@@ -209,7 +218,7 @@ retryLoop:
 		}
 	}
 	if resp == nil {
-		return nil, err
+		return nil, fmt.Errorf("nil resoponse: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -217,7 +226,7 @@ retryLoop:
 	var result []tzktDelegation
 	err = json.NewDecoder(resp.Body).Decode(&result)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error decoding response body: %w", err)
 	}
 
 	// Convert to model.Delegation slice

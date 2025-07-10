@@ -41,7 +41,7 @@ func (h *DelegationHandler) GetDelegations(ctx iris.Context) {
 		to = from.AddDate(1, 0, 0)
 	}
 
-	delegations, err := h.Repo.ListDelegations(limit, offset, from, to)
+	delegations, err := h.Repo.ListDelegations(ctx.Request().Context(), limit, offset, from, to)
 	if err != nil {
 		ctx.StatusCode(http.StatusInternalServerError)
 		ctx.JSON(iris.Map{"error": err.Error()})

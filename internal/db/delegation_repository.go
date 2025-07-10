@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"tezoz-delegation/internal/model"
 	"time"
@@ -60,26 +61,28 @@ func (r *DelegationRepository) InsertDelegations(delegations []*model.Delegation
 	return err
 }
 
-func (r *DelegationRepository) GetLatestTzktID() (int64, error) {
+func (r *DelegationRepository) GetLatestTzktID(ctx context.Context) (int64, error) {
 
 	var tzktID int64
-	err := r.db.QueryRow("SELECT COALESCE(MAX(tzkt_id), 0) FROM delegations").Scan(&tzktID)
+	err := r.db.QueryRowContext(ctx, "SELECT COALESCE(MAX(tzkt_id), 0) FROM delegations").Scan(&tzktID)
 	if err != nil {
 		return 0, err
 	}
 	return tzktID, nil
 }
 
-func (r *DelegationRepository) ListDelegations(limit, offset int, from, to time.Time) ([]model.Delegation, error) {
+func (r *DelegationRepository) ListDelegations(ctx context.Context, limit, offset int, from, to time.Time) ([]model.Delegation, error) {
 	var rows *sql.Rows
 	var err error
 	if from.IsZero() {
-		rows, err = r.db.Query(
+		rows, err = r.db.QueryContext(
+			ctx,
 			`SELECT id, timestamp, amount, delegator, level, tzkt_id FROM delegations ORDER BY timestamp DESC, level DESC LIMIT $1 OFFSET $2`,
 			limit, offset,
 		)
 	} else {
-		rows, err = r.db.Query(
+		rows, err = r.db.QueryContext(
+			ctx,
 			`SELECT id, timestamp, amount, delegator, level, tzkt_id FROM delegations WHERE timestamp >= $1 AND timestamp < $2 ORDER BY timestamp DESC, level DESC LIMIT $3 OFFSET $4`,
 			from, to, limit, offset,
 		)
