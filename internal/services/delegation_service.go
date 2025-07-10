@@ -9,6 +9,11 @@ import (
 	"github.com/rs/zerolog"
 )
 
+// DelegationServiceInterface defines the contract for delegation business logic
+type DelegationServiceInterface interface {
+	GetDelegations(ctx context.Context, pageNo, pageSize int, year *int) ([]model.Delegation, error)
+}
+
 type DelegationService struct {
 	Repo   *db.DelegationRepository
 	Logger zerolog.Logger

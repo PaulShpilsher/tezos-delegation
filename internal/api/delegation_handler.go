@@ -15,6 +15,11 @@ const (
 	maxPageSize     = 1000
 )
 
+// DelegationHandlerInterface defines the contract for delegation HTTP handlers
+type DelegationHandlerInterface interface {
+	GetDelegations(ctx iris.Context)
+}
+
 type DelegationHandler struct {
 	Service *services.DelegationService
 	Logger  zerolog.Logger

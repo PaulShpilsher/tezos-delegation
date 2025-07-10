@@ -7,6 +7,17 @@ import (
 	"tezos-delegation/internal/model"
 )
 
+// DelegationRepositoryInterface defines the contract for delegation data persistence
+// (You can remove the go:generate line if you don't use mockgen)
+//
+//go:generate mockgen -destination=../mocks/mock_delegation_repository.go -package=mocks tezos-delegation/internal/db DelegationRepositoryInterface
+type DelegationRepositoryInterface interface {
+	InsertDelegation(d *model.Delegation) error
+	InsertDelegations(delegations []*model.Delegation) error
+	GetLatestTzktID(ctx context.Context) (int64, error)
+	ListDelegations(ctx context.Context, limit, offset int, year *int) ([]model.Delegation, error)
+}
+
 type DelegationRepository struct {
 	db *sql.DB
 }
