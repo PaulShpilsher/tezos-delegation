@@ -5,14 +5,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"strconv"
 	"time"
 
 	"sync"
-	"tezoz-delegation/internal/db"
-	"tezoz-delegation/internal/model"
+	"tezos-delegation/internal/db"
+	"tezos-delegation/internal/model"
+
+	"github.com/rs/zerolog"
 )
 
 const (
@@ -25,16 +26,19 @@ const (
 	maxTotalWait    = 2 * time.Minute
 )
 
+// Poller periodically syncs delegation data from the Tzkt API to the local database.
 type Poller struct {
 	repo   *db.DelegationRepository
 	client *http.Client
 	wg     sync.WaitGroup
+	logger zerolog.Logger
 }
 
-func NewPoller(repo *db.DelegationRepository) *Poller {
+func NewPoller(repo *db.DelegationRepository, logger zerolog.Logger) *Poller {
 	return &Poller{
 		repo:   repo,
 		client: &http.Client{Timeout: 30 * time.Second},
+		logger: logger,
 	}
 }
 
@@ -63,16 +67,16 @@ func (p *Poller) Wait() {
 func (p *Poller) syncAndPoll(ctx context.Context) {
 	defer p.wg.Done()
 	// 1. Historical sync: fast as possible within rate limits
-	log.Println("[poller] sync historical data")
+	p.logger.Info().Str("phase", "historical_sync").Msg("syncing historical data")
 	for {
 		caughtUp, err := p.syncDelegationsBatch(ctx)
 		if err != nil {
 			if ctx.Err() != nil {
-				log.Println("[poller] context cancelled during historical sync, exiting")
+				p.logger.Error().Err(err).Str("phase", "historical_sync").Msg("context cancelled during historical sync, exiting")
 				return
 			}
-			log.Printf("[poller] error during historical sync: %v", err)
-			time.Sleep(time.Millisecond * 500)
+			p.logger.Error().Err(err).Str("phase", "historical_sync").Msg("error during historical sync")
+			time.Sleep(500 * time.Millisecond)
 			continue
 		}
 		if caughtUp {
@@ -81,7 +85,7 @@ func (p *Poller) syncAndPoll(ctx context.Context) {
 	}
 
 	// 2. Polling: every minute, but catch up if behind
-	log.Println("[poller] synced.  polling for new data")
+	p.logger.Info().Msg("caught up. Polling for new data...")
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
 	for {
@@ -93,10 +97,10 @@ func (p *Poller) syncAndPoll(ctx context.Context) {
 				caughtUp, err := p.syncDelegationsBatch(ctx)
 				if err != nil {
 					if ctx.Err() != nil {
-						log.Println("[poller] context cancelled during polling, exiting")
+						p.logger.Error().Err(err).Str("phase", "polling").Msg("context cancelled during polling, exiting")
 						return
 					}
-					log.Printf("[poller] error during polling: %v", err)
+					p.logger.Error().Err(err).Str("phase", "polling").Msg("error during polling")
 					time.Sleep(time.Second)
 					continue
 				}
@@ -113,22 +117,21 @@ func (p *Poller) syncDelegationsBatch(ctx context.Context) (bool, error) {
 		return false, ctx.Err()
 	}
 
-	// Get last stored delegaton TztkID
+	// Get last stored delegation TzktID
 	lastTzktID, err := p.repo.GetLatestTzktID(ctx)
 	if err != nil {
 		return false, fmt.Errorf("error getting latest TzktID from database: %w", err)
 	}
 
-	log.Printf("[poller] fetching delegations with latest TzktID %d", lastTzktID)
+	p.logger.Info().Int64("latest_tzkt_id", lastTzktID).Msg("fetching delegations with latest TzktID")
 
-	// Get a block of delegations from Tztk API
+	// Get a block of delegations from Tzkt API
 	delegations, err := p.fetchDelegationBatch(ctx, lastTzktID)
 	if err != nil {
 		return false, fmt.Errorf("error fetching delegations from tzkt: %w", err)
-
 	}
 
-	log.Printf("[poller] fetched %d delegations", len(delegations))
+	p.logger.Info().Int("fetched_delegations_count", len(delegations)).Msg("fetched delegations")
 	if len(delegations) == 0 {
 		return true, nil // caught up
 	}
@@ -141,26 +144,9 @@ func (p *Poller) syncDelegationsBatch(ctx context.Context) (bool, error) {
 
 	err = p.repo.InsertDelegations(delegationPtrs)
 	if err != nil {
-		return false, fmt.Errorf("error storing delegations ro database: %w", err)
+		return false, fmt.Errorf("error storing delegations to database: %w", err)
 	}
 	return len(delegations) < pageSize, nil // caught up if less than a full page
-}
-
-// parseRetryAfter parses the Retry-After header, supporting both seconds and HTTP-date formats.
-// Returns a duration to wait, or an error if the header is missing or invalid.
-func parseRetryAfter(header string) (time.Duration, error) {
-	if header == "" {
-		return 0, fmt.Errorf("empty Retry-After")
-	}
-	// Try as integer seconds
-	if secs, err := strconv.Atoi(header); err == nil {
-		return time.Duration(secs) * time.Second, nil
-	}
-	// Try as HTTP-date
-	if t, err := http.ParseTime(header); err == nil {
-		return time.Until(t), nil
-	}
-	return 0, fmt.Errorf("invalid Retry-After: %s", header)
 }
 
 // fetchDelegationBatch fetches a batch of delegations from the Tzkt API, handling rate limits, server errors, and retries.
@@ -171,7 +157,6 @@ func parseRetryAfter(header string) (time.Duration, error) {
 // - Enforces a maximum number of retries and a maximum total wait time.
 // - All network and retry waits are cancellable via the provided context.
 func (p *Poller) fetchDelegationBatch(ctx context.Context, lastID int64) ([]model.Delegation, error) {
-
 	url := fmt.Sprintf("%s?limit=%d&id.gt=%d", tzktBaseURL, pageSize, lastID)
 
 	var resp *http.Response
@@ -203,11 +188,11 @@ retryLoop:
 			var wait time.Duration
 			if d, err := parseRetryAfter(retryAfter); err == nil && d > 0 {
 				wait = d
-				log.Printf("[poller] HTTP %d, Retry-After: %s, waiting %s (attempt %d/%d)", resp.StatusCode, retryAfter, wait, attempt+1, maxRetries)
+				p.logger.Info().Int("status_code", resp.StatusCode).Str("retry_after", retryAfter).Dur("wait_time", wait).Msg("HTTP status too many requests, retrying in")
 			} else {
 				// Fallback to exponential backoff if Retry-After is missing or invalid
 				wait = backoff
-				log.Printf("[poller] HTTP %d, invalid/missing Retry-After, backoff %s (attempt %d/%d)", resp.StatusCode, wait, attempt+1, maxRetries)
+				p.logger.Info().Int("status_code", resp.StatusCode).Dur("wait_time", wait).Int("attempt", attempt+1).Int("max_retries", maxRetries).Msg("HTTP status too many requests, invalid/missing Retry-After, backoff")
 				backoff *= 2
 			}
 			// Wait for the specified duration or until context is cancelled
@@ -221,7 +206,7 @@ retryLoop:
 			if resp.StatusCode >= 500 && resp.StatusCode < 600 {
 				// Server error: retry with exponential backoff
 				resp.Body.Close()
-				log.Printf("[poller] HTTP %d server error, retrying in %s (attempt %d/%d)", resp.StatusCode, backoff, attempt+1, maxRetries)
+				p.logger.Info().Int("status_code", resp.StatusCode).Int("attempt", attempt+1).Int("max_retries", maxRetries).Dur("wait_time", backoff).Msg("HTTP server error, retrying in")
 				select {
 				case <-ctx.Done():
 					return nil, ctx.Err()
@@ -233,12 +218,12 @@ retryLoop:
 			// Other unexpected status codes: log and return error with response body
 			body, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyLen))
 			resp.Body.Close()
-			log.Printf("[poller] HTTP %d unexpected, not retrying. Body: %s", resp.StatusCode, string(body))
+			p.logger.Error().Int("status_code", resp.StatusCode).Str("body", string(body)).Msg("HTTP unexpected, not retrying")
 			return nil, fmt.Errorf("unexpected status code: %d, body: %s", resp.StatusCode, string(body))
 		}
 	}
 	if resp == nil {
-		return nil, fmt.Errorf("nil resoponse: %w", err)
+		return nil, fmt.Errorf("nil response: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -262,4 +247,21 @@ retryLoop:
 	}
 
 	return delegations, nil
+}
+
+// parseRetryAfter parses the Retry-After header, supporting both seconds and HTTP-date formats.
+// Returns a duration to wait, or an error if the header is missing or invalid.
+func parseRetryAfter(header string) (time.Duration, error) {
+	if header == "" {
+		return 0, fmt.Errorf("empty Retry-After")
+	}
+	// Try as integer seconds
+	if secs, err := strconv.Atoi(header); err == nil {
+		return time.Duration(secs) * time.Second, nil
+	}
+	// Try as HTTP-date
+	if t, err := http.ParseTime(header); err == nil {
+		return time.Until(t), nil
+	}
+	return 0, fmt.Errorf("invalid Retry-After: %s", header)
 }

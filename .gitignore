@@ -30,7 +30,7 @@
 postgres_data/
 
 # Build output
-/tezoz-delegation
+/tezos-delegation
 
 # OS generated files
 .DS_Store

@@ -1,11 +1,10 @@
 package main
 
 import (
-	"log"
-	"tezoz-delegation/internal/api"
-	"tezoz-delegation/internal/config"
-	"tezoz-delegation/internal/db"
-	"tezoz-delegation/internal/services"
+	"tezos-delegation/internal/api"
+	"tezos-delegation/internal/config"
+	"tezos-delegation/internal/db"
+	"tezos-delegation/internal/services"
 
 	"context"
 	"os"
@@ -14,21 +13,24 @@ import (
 	"time"
 
 	"github.com/kataras/iris/v12"
+	"github.com/rs/zerolog"
 )
 
 func main() {
+	// Initialize zerolog logger
+	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
+	logger := zerolog.New(os.Stdout).With().Timestamp().Logger()
+
 	// Load configuration
 	cfg, err := config.LoadConfig()
 	if err != nil {
-		println("Config error:", err.Error())
-		os.Exit(1)
+		logger.Fatal().Err(err).Msg("Load config error")
 	}
 
 	// Initialize database connection
 	dbConn, err := db.NewDBConnectionFromDSN(cfg.DBUrl)
 	if err != nil {
-		println("Database connection error:", err.Error())
-		os.Exit(1)
+		logger.Fatal().Err(err).Msg("Database connection error")
 	}
 	defer dbConn.Close()
 
@@ -38,13 +40,13 @@ func main() {
 	defer cancelPoller()
 
 	// Start polling service
-	poller := services.NewPoller(delegationRepo)
+	poller := services.NewPoller(delegationRepo, logger)
 	poller.Start(ctx)
 
 	// Create and configure the Iris application
 	app := iris.New()
 	delegationService := services.NewDelegationService(delegationRepo)
-	delegationHandler := api.NewDelegationHandler(delegationService)
+	delegationHandler := api.NewDelegationHandler(delegationService, logger)
 	api.RegisterRoutes(app, api.RouterDeps{DelegationHandler: delegationHandler})
 
 	// Graceful shutdown setup
@@ -53,7 +55,7 @@ func main() {
 
 	go func() {
 		if err := app.Listen(":"+cfg.ServerPort, iris.WithoutInterruptHandler); err != nil {
-			app.Logger().Fatalf("Server error: %v", err)
+			logger.Fatal().Err(err).Msg("HTTP server error")
 		}
 	}()
 
@@ -61,7 +63,7 @@ func main() {
 	app.Logger().Info("Shutting down server...")
 
 	// Stop poller and wait for completion
-	log.Println("Shutting down poller")
+	logger.Info().Msg("Shutting down poller")
 	cancelPoller()
 	done := make(chan struct{})
 	go func() {
@@ -70,14 +72,14 @@ func main() {
 	}()
 	select {
 	case <-done:
-		log.Println("Poller shut down cleanly")
+		logger.Info().Msg("Poller shut down cleanly")
 	case <-time.After(5 * time.Second):
-		log.Println("WARNING: Poller did not shut down within 5 seconds, forcing exit")
+		logger.Warn().Msg("WARNING: Poller did not shut down within 5 seconds, forcing exit")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := app.Shutdown(ctx); err != nil {
-		app.Logger().Fatalf("Server forced to shutdown: %v", err)
+		logger.Fatal().Err(err).Msg("HTTP Server forced to shutdown")
 	}
 }

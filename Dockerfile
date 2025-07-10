@@ -4,7 +4,7 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o tezoz-delegation ./cmd/main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o tezos-delegation ./cmd/main.go
 
 # # --- Test Stage ---
 # FROM builder AS tester
@@ -20,11 +20,11 @@ RUN apk --no-cache add ca-certificates
 # Create a non-root user
 RUN adduser -D -g '' appuser
 
-COPY --from=builder /app/tezoz-delegation ./tezoz-delegation
+COPY --from=builder /app/tezos-delegation ./tezos-delegation
 
 # Set permissions
 RUN chown -R appuser:appuser /app
 
 USER appuser
 
-ENTRYPOINT ["/app/tezoz-delegation"] 
+ENTRYPOINT ["/app/tezos-delegation"] 

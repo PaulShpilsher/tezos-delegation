@@ -3,8 +3,8 @@ package services
 import (
 	"context"
 
-	"tezoz-delegation/internal/db"
-	"tezoz-delegation/internal/model"
+	"tezos-delegation/internal/db"
+	"tezos-delegation/internal/model"
 )
 
 type DelegationService struct {

@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"tezoz-delegation/internal/model"
+	"tezos-delegation/internal/model"
 )
 
 type DelegationRepository struct {
