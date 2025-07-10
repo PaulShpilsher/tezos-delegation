@@ -36,22 +36,21 @@ func main() {
 
 	// Initialize repositories and services
 	delegationRepo := db.NewDelegationRepository(dbConn)
-	ctx, cancelPoller := context.WithCancel(context.Background())
-	defer cancelPoller()
-
-	// Start polling service
-	poller := services.NewPoller(delegationRepo, logger)
-	poller.Start(ctx)
-
-	// Create and configure the Iris application
-	app := iris.New()
+	pollerService := services.NewPoller(delegationRepo, logger)
 	delegationService := services.NewDelegationService(delegationRepo)
 	delegationHandler := api.NewDelegationHandler(delegationService, logger)
+
+	app := iris.New()
 	api.RegisterRoutes(app, api.RouterDeps{DelegationHandler: delegationHandler})
 
 	// Graceful shutdown setup
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	// Start Poller
+	ctx, cancelPoller := context.WithCancel(context.Background())
+	defer cancelPoller()
+	pollerService.Start(ctx)
 
 	go func() {
 		if err := app.Listen(":"+cfg.ServerPort, iris.WithoutInterruptHandler); err != nil {
@@ -67,7 +66,7 @@ func main() {
 	cancelPoller()
 	done := make(chan struct{})
 	go func() {
-		poller.Wait()
+		pollerService.Wait()
 		close(done)
 	}()
 	select {
