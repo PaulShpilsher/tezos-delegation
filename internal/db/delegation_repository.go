@@ -3,8 +3,8 @@ package db
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"tezoz-delegation/internal/model"
-	"time"
 )
 
 type DelegationRepository struct {
@@ -71,26 +71,29 @@ func (r *DelegationRepository) GetLatestTzktID(ctx context.Context) (int64, erro
 	return tzktID, nil
 }
 
-func (r *DelegationRepository) ListDelegations(ctx context.Context, limit, offset int, from, to time.Time) ([]model.Delegation, error) {
+var ErrNoDelegations = errors.New("no delegations found")
+
+func (r *DelegationRepository) ListDelegations(ctx context.Context, limit, offset int, year *int) ([]model.Delegation, error) {
 	var rows *sql.Rows
 	var err error
-	if from.IsZero() {
+	if year != nil {
 		rows, err = r.db.QueryContext(
 			ctx,
-			`SELECT id, timestamp, amount, delegator, level, tzkt_id FROM delegations ORDER BY timestamp DESC, level DESC LIMIT $1 OFFSET $2`,
-			limit, offset,
+			`SELECT id, timestamp, amount, delegator, level, tzkt_id FROM delegations WHERE EXTRACT(YEAR FROM timestamp) = $1 ORDER BY timestamp DESC, level DESC LIMIT $2 OFFSET $3`,
+			*year, limit, offset,
 		)
 	} else {
 		rows, err = r.db.QueryContext(
 			ctx,
-			`SELECT id, timestamp, amount, delegator, level, tzkt_id FROM delegations WHERE timestamp >= $1 AND timestamp < $2 ORDER BY timestamp DESC, level DESC LIMIT $3 OFFSET $4`,
-			from, to, limit, offset,
+			`SELECT id, timestamp, amount, delegator, level, tzkt_id FROM delegations ORDER BY timestamp DESC, level DESC LIMIT $1 OFFSET $2`,
+			limit, offset,
 		)
 	}
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
+
 	var result []model.Delegation
 	for rows.Next() {
 		var d model.Delegation
@@ -98,6 +101,9 @@ func (r *DelegationRepository) ListDelegations(ctx context.Context, limit, offse
 			return nil, err
 		}
 		result = append(result, d)
+	}
+	if len(result) == 0 {
+		return nil, ErrNoDelegations
 	}
 	return result, nil
 }

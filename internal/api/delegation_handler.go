@@ -17,28 +17,67 @@ func NewDelegationHandler(service *services.DelegationService) *DelegationHandle
 	return &DelegationHandler{Service: service}
 }
 
+// TODO: possibly make this configurable
+const defaultPageSize = 50
+
 func (h *DelegationHandler) GetDelegations(ctx iris.Context) {
-	page, _ := strconv.Atoi(ctx.URLParamDefault("page", "1"))
-	year := ctx.URLParam("year")
-	delegations, err := h.Service.GetDelegations(ctx.Request().Context(), page, year)
-	if err != nil {
-		if err.Error() == "parsing time \"\": month out of range" || err.Error() == "invalid year format" {
+	// Parse 'page' query param (default 1)
+	page := 1
+	if ctx.URLParamExists("page") {
+		p, err := ctx.URLParamInt("page")
+		if err != nil || p < 1 {
 			ctx.StatusCode(http.StatusBadRequest)
-			ctx.JSON(iris.Map{"error": "invalid year format"})
+			ctx.JSON(iris.Map{"error": "invalid page parameter"})
 			return
 		}
+		page = p
+	}
+
+	// Parse 'page_size' query param (default defaultPageSize, max 1000)
+	pageSize := defaultPageSize
+
+	// Future enhancement: add page_size as an optional query parameter
+	// commented out code as an example below
+	// if ctx.URLParamExists("page_size") {
+	// 	ps, err := ctx.URLParamInt("page_size")
+	// 	if err != nil || ps < 1 {
+	// 		ctx.StatusCode(http.StatusBadRequest)
+	// 		ctx.JSON(iris.Map{"error": "invalid page_size parameter"})
+	// 		return
+	// 	}
+	// 	if ps > 1000 {
+	// 		ps = 1000 // enforce max page size
+	// 	}
+	// 	pageSize = ps
+	// }
+
+	// Parse 'year' query param (optional)
+	yearStr := ctx.URLParam("year")
+	var yearPtr *int
+	if yearStr != "" {
+		yearInt, err := strconv.Atoi(yearStr)
+		if err != nil || yearInt < 0 {
+			ctx.StatusCode(http.StatusBadRequest)
+			ctx.JSON(iris.Map{"error": "invalid year parameter"})
+			return
+		}
+		yearPtr = &yearInt
+	}
+
+	delegations, err := h.Service.GetDelegations(ctx.Request().Context(), page, pageSize, yearPtr)
+	if err != nil {
 		ctx.StatusCode(http.StatusInternalServerError)
 		ctx.JSON(iris.Map{"error": err.Error()})
 		return
 	}
-	data := make([]iris.Map, 0, len(delegations))
+	result := make([]DelegationDto, 0, len(delegations))
 	for _, d := range delegations {
-		data = append(data, iris.Map{
-			"timestamp": d.Timestamp.UTC().Format(time.RFC3339),
-			"amount":    d.Amount,
-			"delegator": d.Delegator,
-			"level":     strconv.Itoa(int(d.Level)),
+		result = append(result, DelegationDto{
+			Timestamp: d.Timestamp.UTC().Format(time.RFC3339),
+			Amount:    d.Amount,
+			Delegator: d.Delegator,
+			Level:     strconv.FormatInt(d.Level, 10),
 		})
 	}
-	ctx.JSON(iris.Map{"data": data})
+	ctx.JSON(GetDelegationsResponse{Data: result})
 }

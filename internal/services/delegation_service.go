@@ -2,7 +2,6 @@ package services
 
 import (
 	"context"
-	"time"
 
 	"tezoz-delegation/internal/db"
 	"tezoz-delegation/internal/model"
@@ -17,22 +16,18 @@ func NewDelegationService(repo *db.DelegationRepository) *DelegationService {
 }
 
 // GetDelegations returns delegations with pagination and optional year filter.
-func (s *DelegationService) GetDelegations(ctx context.Context, page int, year string) ([]model.Delegation, error) {
-	if page < 1 {
-		page = 1
+func (s *DelegationService) GetDelegations(ctx context.Context, pageNo, pageSize int, year *int) ([]model.Delegation, error) {
+	if pageNo < 1 {
+		pageNo = 1
 	}
-	limit := 50
-	offset := (page - 1) * limit
+	offset := (pageNo - 1) * pageSize
 
-	var from, to time.Time
-	var err error
-	if year != "" {
-		from, err = time.Parse("2006", year)
-		if err != nil {
-			return nil, err
+	delegations, err := s.Repo.ListDelegations(ctx, pageSize, offset, year)
+	if err != nil {
+		if err == db.ErrNoDelegations {
+			return []model.Delegation{}, nil
 		}
-		to = from.AddDate(1, 0, 0)
+		return nil, err
 	}
-
-	return s.Repo.ListDelegations(ctx, limit, offset, from, to)
+	return delegations, nil
 }

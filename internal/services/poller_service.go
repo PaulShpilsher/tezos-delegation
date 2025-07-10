@@ -72,7 +72,7 @@ func (p *Poller) syncAndPoll(ctx context.Context) {
 				return
 			}
 			log.Printf("[poller] error during historical sync: %v", err)
-			time.Sleep(time.Second)
+			time.Sleep(time.Millisecond * 500)
 			continue
 		}
 		if caughtUp {
