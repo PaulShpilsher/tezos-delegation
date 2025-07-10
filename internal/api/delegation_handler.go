@@ -21,11 +21,11 @@ type DelegationHandlerInterface interface {
 }
 
 type DelegationHandler struct {
-	Service *services.DelegationService
+	Service services.DelegationServiceInterface
 	Logger  zerolog.Logger
 }
 
-func NewDelegationHandler(service *services.DelegationService, logger zerolog.Logger) *DelegationHandler {
+func NewDelegationHandler(service services.DelegationServiceInterface, logger zerolog.Logger) *DelegationHandler {
 	return &DelegationHandler{Service: service, Logger: logger}
 }
 

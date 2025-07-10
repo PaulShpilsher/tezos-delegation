@@ -15,11 +15,11 @@ type DelegationServiceInterface interface {
 }
 
 type DelegationService struct {
-	Repo   *db.DelegationRepository
+	Repo   db.DelegationRepositoryInterface
 	Logger zerolog.Logger
 }
 
-func NewDelegationService(repo *db.DelegationRepository, logger zerolog.Logger) *DelegationService {
+func NewDelegationService(repo db.DelegationRepositoryInterface, logger zerolog.Logger) *DelegationService {
 	return &DelegationService{Repo: repo, Logger: logger}
 }
 
