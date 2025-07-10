@@ -3,46 +3,30 @@ package api
 import (
 	"net/http"
 	"strconv"
+	"tezoz-delegation/internal/services"
 	"time"
-
-	"tezoz-delegation/internal/db"
 
 	"github.com/kataras/iris/v12"
 )
 
 type DelegationHandler struct {
-	Repo *db.DelegationRepository
+	Service *services.DelegationService
 }
 
-func NewDelegationHandler(repo *db.DelegationRepository) *DelegationHandler {
-	return &DelegationHandler{Repo: repo}
+func NewDelegationHandler(service *services.DelegationService) *DelegationHandler {
+	return &DelegationHandler{Service: service}
 }
 
 func (h *DelegationHandler) GetDelegations(ctx iris.Context) {
-	// Pagination
 	page, _ := strconv.Atoi(ctx.URLParamDefault("page", "1"))
-	if page < 1 {
-		page = 1
-	}
-	limit := 50
-	offset := (page - 1) * limit
-
-	// Year filter
 	year := ctx.URLParam("year")
-	var from, to time.Time
-	var err error
-	if year != "" {
-		from, err = time.Parse("2006", year)
-		if err != nil {
+	delegations, err := h.Service.GetDelegations(ctx.Request().Context(), page, year)
+	if err != nil {
+		if err.Error() == "parsing time \"\": month out of range" || err.Error() == "invalid year format" {
 			ctx.StatusCode(http.StatusBadRequest)
 			ctx.JSON(iris.Map{"error": "invalid year format"})
 			return
 		}
-		to = from.AddDate(1, 0, 0)
-	}
-
-	delegations, err := h.Repo.ListDelegations(ctx.Request().Context(), limit, offset, from, to)
-	if err != nil {
 		ctx.StatusCode(http.StatusInternalServerError)
 		ctx.JSON(iris.Map{"error": err.Error()})
 		return

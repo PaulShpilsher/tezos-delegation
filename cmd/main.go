@@ -43,7 +43,8 @@ func main() {
 
 	// Create and configure the Iris application
 	app := iris.New()
-	delegationHandler := api.NewDelegationHandler(delegationRepo)
+	delegationService := services.NewDelegationService(delegationRepo)
+	delegationHandler := api.NewDelegationHandler(delegationService)
 	api.RegisterRoutes(app, api.RouterDeps{DelegationHandler: delegationHandler})
 
 	// Graceful shutdown setup
