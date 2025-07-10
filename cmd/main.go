@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"tezoz-delegation/internal/api"
 	"tezoz-delegation/internal/config"
 	"tezoz-delegation/internal/db"
@@ -57,7 +58,21 @@ func main() {
 
 	<-quit
 	app.Logger().Info("Shutting down server...")
+
+	// Stop poller and wait for completion
+	log.Println("Shutting down poller")
 	cancelPoller()
+	done := make(chan struct{})
+	go func() {
+		poller.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		log.Println("Poller shut down cleanly")
+	case <-time.After(5 * time.Second):
+		log.Println("WARNING: Poller did not shut down within 5 seconds, forcing exit")
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

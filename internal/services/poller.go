@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"time"
 
+	"sync"
 	"tezoz-delegation/internal/db"
 	"tezoz-delegation/internal/model"
 )
@@ -27,6 +28,7 @@ const (
 type Poller struct {
 	repo   *db.DelegationRepository
 	client *http.Client
+	wg     sync.WaitGroup
 }
 
 func NewPoller(repo *db.DelegationRepository) *Poller {
@@ -47,17 +49,28 @@ type tzktDelegation struct {
 }
 
 func (p *Poller) Start(ctx context.Context) {
+	p.wg.Add(1)
 	go p.syncAndPoll(ctx)
+}
+
+// Wait blocks until the poller has fully stopped.
+func (p *Poller) Wait() {
+	p.wg.Wait()
 }
 
 // syncAndPoll first downloads all historical data as fast as possible (rate-limited),
 // then switches to periodic polling for new data every minute, catching up if behind.
 func (p *Poller) syncAndPoll(ctx context.Context) {
+	defer p.wg.Done()
 	// 1. Historical sync: fast as possible within rate limits
 	log.Println("[poller] sync historical data")
 	for {
 		caughtUp, err := p.syncDelegationsBatch(ctx)
 		if err != nil {
+			if ctx.Err() != nil {
+				log.Println("[poller] context cancelled during historical sync, exiting")
+				return
+			}
 			log.Printf("[poller] error during historical sync: %v", err)
 			time.Sleep(time.Second)
 			continue
@@ -79,6 +92,10 @@ func (p *Poller) syncAndPoll(ctx context.Context) {
 			for {
 				caughtUp, err := p.syncDelegationsBatch(ctx)
 				if err != nil {
+					if ctx.Err() != nil {
+						log.Println("[poller] context cancelled during polling, exiting")
+						return
+					}
 					log.Printf("[poller] error during polling: %v", err)
 					time.Sleep(time.Second)
 					continue
@@ -92,6 +109,9 @@ func (p *Poller) syncAndPoll(ctx context.Context) {
 }
 
 func (p *Poller) syncDelegationsBatch(ctx context.Context) (bool, error) {
+	if ctx.Err() != nil {
+		return false, ctx.Err()
+	}
 
 	// Get last stored delegaton TztkID
 	lastTzktID, err := p.repo.GetLatestTzktID(ctx)
