@@ -70,10 +70,11 @@ func (h *DelegationHandler) GetDelegations(ctx iris.Context) {
 	for _, d := range delegations {
 		result = append(result, DelegationDto{
 			Timestamp: d.Timestamp.UTC().Format(time.RFC3339),
-			Amount:    d.Amount,
+			Amount:    strconv.FormatInt(d.Amount, 10),
 			Delegator: d.Delegator,
 			Level:     strconv.FormatInt(d.Level, 10),
 		})
 	}
 	ctx.JSON(GetDelegationsResponse{Data: result})
+	ctx.StatusCode(http.StatusOK)
 }

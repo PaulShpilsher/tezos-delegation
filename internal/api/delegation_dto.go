@@ -2,7 +2,7 @@ package api
 
 type DelegationDto struct {
 	Timestamp string `json:"timestamp"`
-	Amount    int64  `json:"amount"`
+	Amount    string `json:"amount"`
 	Delegator string `json:"delegator"`
 	Level     string `json:"level"`
 }
