@@ -100,17 +100,16 @@ func (p *Poller) syncDelegationsBatch(ctx context.Context) (bool, error) {
 	if len(delegations) == 0 {
 		return true, nil // caught up
 	}
-	for _, d := range delegations {
-		select {
-		case <-ctx.Done():
-			return true, ctx.Err()
-		default:
-		}
 
-		err = p.repo.InsertDelegation(&d)
-		if err != nil {
-			return false, err
-		}
+	// Convert []model.Delegation to []*model.Delegation
+	delegationPtrs := make([]*model.Delegation, len(delegations))
+	for i := range delegations {
+		delegationPtrs[i] = &delegations[i]
+	}
+
+	err = p.repo.InsertDelegations(delegationPtrs)
+	if err != nil {
+		return false, err
 	}
 	return len(delegations) < pageSize, nil // caught up if less than a full page
 }

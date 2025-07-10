@@ -24,6 +24,42 @@ func (r *DelegationRepository) InsertDelegation(d *model.Delegation) error {
 	return err
 }
 
+func (r *DelegationRepository) InsertDelegations(delegations []*model.Delegation) (err error) {
+	if len(delegations) == 0 {
+		return nil
+	}
+
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if p := recover(); p != nil {
+			tx.Rollback()
+			panic(p)
+		} else if err != nil {
+			tx.Rollback()
+		}
+	}()
+
+	const query = `INSERT INTO delegations (tzkt_id, timestamp, amount, delegator, level) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (tzkt_id) DO NOTHING`
+	stmt, err := tx.Prepare(query)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for _, d := range delegations {
+		_, err = stmt.Exec(d.TzktID, d.Timestamp, d.Amount, d.Delegator, d.Level)
+		if err != nil {
+			return err
+		}
+	}
+
+	err = tx.Commit()
+	return err
+}
+
 func (r *DelegationRepository) GetLatestTzktID() (int64, error) {
 
 	var tzktID int64
