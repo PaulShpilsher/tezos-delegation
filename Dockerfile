@@ -6,9 +6,9 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o tezos-delegation ./cmd/main.go
 
-# # --- Test Stage ---
-# FROM builder AS tester
-# RUN go test ./...
+# --- Test Stage ---
+FROM builder AS tester
+RUN go test ./...
 
 # --- Final Stage ---
 FROM alpine:latest AS final
