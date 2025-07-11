@@ -165,11 +165,11 @@ func (h *DelegationHandler) GetDelegations(ctx iris.Context) {
 			logMessage = "Validation error in GetDelegations"
 		} else if apperrors.IsDatabaseError(err) {
 			statusCode = http.StatusInternalServerError
-			userMessage = "Service temporarily unavailable"
+			userMessage = "Database error"
 			logMessage = "Database error in GetDelegations"
 		} else {
 			statusCode = http.StatusInternalServerError
-			userMessage = "Service temporarily unavailable"
+			userMessage = "Internal server error"
 			logMessage = "Unexpected error in GetDelegations"
 		}
 
