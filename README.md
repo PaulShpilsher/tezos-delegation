@@ -31,6 +31,7 @@ This microservice synchronizes Tezos delegation operations from the [Tzkt API](h
 
 ## Quickstart
 
+
 ### 1. Clone the repository
 ```sh
 # git clone <repo-url>  # just a placeholder - it has not been published to github
@@ -42,12 +43,24 @@ cd tezos-delegation
 docker-compose up --build
 ```
 - The API will be available at [http://localhost:3000/xtz/delegations](http://localhost:3000/xtz/delegations)
-- PostgreSQL will be available at `localhost:5432`
+- PostgreSQL will be available at `localhost:5432`  
+
+   For credentials, see the [`.env.docker`](./.env.docker) file.
 
 ### 3. Run tests
 ```sh
 go test ./...
 ```
+
+### Minimal Docker Image
+
+This project includes a multi-stage Dockerfile that produces a minimal image using `FROM scratch` as the final stage. The resulting image contains only the statically-linked Go binary and CA certificates, yielding a very small and secure container.
+
+**Key points:**
+- The final image is built from scratch (no OS layer), minimizing attack surface and image size.
+- Only the application binary and CA certificates are included.
+- No shell, package manager, or extra files are present.
+
 
 ---
 
@@ -112,7 +125,7 @@ curl 'http://localhost:3000/xtz/delegations'
 ```
 - **With all parameters:**
 ```sh
-curl 'http://localhost:3000/xtz/delegations?page=2&pageSize=100&year=2022'
+curl 'http://localhost:3000/xtz/delegations?page=2&year=2022'
 ```
 - **Missing/invalid parameter (error):**
 ```sh
@@ -121,7 +134,7 @@ curl 'http://localhost:3000/xtz/delegations?page=0'
 ```
 - **Optional year omitted:**
 ```sh
-curl 'http://localhost:3000/xtz/delegations?page=1&pageSize=10'
+curl 'http://localhost:3000/xtz/delegations?page=1'
 ```
 
 ---
@@ -192,18 +205,25 @@ curl 'http://localhost:3000/xtz/delegations?page=1&pageSize=10'
 
 ### Schema
 ```sql
+
 CREATE TABLE IF NOT EXISTS delegations (
-    id SERIAL PRIMARY KEY,
-    tzkt_id BIGINT UNIQUE NOT NULL,
-    timestamp TIMESTAMP NOT NULL,
-    amount BIGINT NOT NULL,
-    delegator TEXT NOT NULL,
-    level BIGINT NOT NULL
+    id SERIAL PRIMARY KEY,              -- Surrogate primary key for internal use
+    tzkt_id BIGINT UNIQUE NOT NULL,     -- Unique identifier from the Tzkt API to prevent duplicates
+    timestamp TIMESTAMP NOT NULL,       -- UTC timestamp of the delegation operation
+    amount BIGINT NOT NULL,             -- Amount delegated (in mutez, 1 tez = 1,000,000 mutez)
+    delegator TEXT NOT NULL,            -- Sender's (delegator's) address
+    level BIGINT NOT NULL               -- Block height of the delegation
 );
+
+-- Constraints for data integrity and security
 ALTER TABLE delegations ADD CONSTRAINT chk_amount_non_negative CHECK (amount >= 0);
 ALTER TABLE delegations ADD CONSTRAINT chk_level_non_negative CHECK (level >= 0);
+
+-- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_timestamp_tzkt_id_desc ON delegations (timestamp DESC, tzkt_id DESC);
 CREATE INDEX IF NOT EXISTS idx_year_timestamp_tzkt_id_desc ON delegations (EXTRACT(YEAR FROM timestamp), timestamp DESC, tzkt_id DESC);
+
+
 ```
 - **Indexes**: Support fast pagination and year-based queries.
 - **Constraints**: Ensure data integrity (no negative amounts/levels, unique Tzkt IDs).
