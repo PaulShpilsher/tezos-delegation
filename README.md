@@ -161,7 +161,7 @@ curl 'http://localhost:3000/xtz/delegations?page=1'
 ### Components
 - **PollerService**: Periodically fetches new delegations from Tzkt, stores them in the DB. Handles historical sync and polling, with robust retry and rate-limit handling.
 - **DelegationService**: Business logic for retrieving delegations with pagination and filtering.
-- **API Layer**: Exposes `/xtz/delegations` endpoint, validates input, handles errors, and caches responses for 30s.
+- **API Layer**: Exposes `/xtz/delegations` endpoint, validates input, handles errors.
 - **Repository Layer**: Handles DB access, ensures idempotency and efficient queries.
 - **Config Layer**: Loads environment variables, supports different environments.
 
