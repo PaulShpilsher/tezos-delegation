@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"tezos-delegation/internal/apperrors"
 	"tezos-delegation/internal/model"
-	"tezos-delegation/internal/services"
+	"tezos-delegation/internal/ports"
 	"time"
 
 	"github.com/kataras/iris/v12"
@@ -17,17 +17,13 @@ const (
 	maxPageSize     = 1000
 )
 
-// DelegationHandlerPort defines the contract for delegation HTTP handlers
-type DelegationHandlerPort interface {
-	GetDelegations(ctx iris.Context)
-}
-
+// DelegationHandler implements DelegationHandlerPort
 type DelegationHandler struct {
-	Service services.DelegationServicePort
+	Service ports.DelegationServicePort
 	Logger  zerolog.Logger
 }
 
-func NewDelegationHandler(service services.DelegationServicePort, logger zerolog.Logger) *DelegationHandler {
+func NewDelegationHandler(service ports.DelegationServicePort, logger zerolog.Logger) *DelegationHandler {
 	return &DelegationHandler{
 		Service: service,
 		Logger:  logger.With().Str("component", "delegation_handler").Logger(),

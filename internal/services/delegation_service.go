@@ -7,21 +7,21 @@ import (
 	"tezos-delegation/internal/apperrors"
 	"tezos-delegation/internal/db"
 	"tezos-delegation/internal/model"
+	"tezos-delegation/internal/ports"
 
 	"github.com/rs/zerolog"
 )
 
-// DelegationServicePort defines the contract for delegation business logic
-type DelegationServicePort interface {
-	GetDelegations(ctx context.Context, pageNo, pageSize int, year *int) ([]model.Delegation, error)
-}
-
+// DelegationService implements DelegationServicePort
 type DelegationService struct {
-	Repo   db.DelegationRepositoryPort
+	Repo   ports.DelegationRepositoryPort
 	Logger zerolog.Logger
 }
 
-func NewDelegationService(repo db.DelegationRepositoryPort, logger zerolog.Logger) *DelegationService {
+// Ensure DelegationService implements DelegationServicePort
+var _ ports.DelegationServicePort = (*DelegationService)(nil)
+
+func NewDelegationService(repo ports.DelegationRepositoryPort, logger zerolog.Logger) *DelegationService {
 	return &DelegationService{
 		Repo:   repo,
 		Logger: logger.With().Str("component", "delegation_service").Logger(),

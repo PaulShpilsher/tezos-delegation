@@ -7,22 +7,16 @@ import (
 	"fmt"
 	"tezos-delegation/internal/apperrors"
 	"tezos-delegation/internal/model"
+	"tezos-delegation/internal/ports"
 )
 
-// DelegationRepositoryPort defines the contract for delegation data persistence
-// (You can remove the go:generate line if you don't use mockgen)
-//
-//go:generate mockgen -destination=../mocks/mock_delegation_repository.go -package=mocks tezos-delegation/internal/db DelegationRepositoryPort
-
-type DelegationRepositoryPort interface {
-	InsertDelegations(delegations []*model.Delegation) error
-	GetLatestTzktID(ctx context.Context) (int64, error)
-	ListDelegations(ctx context.Context, limit, offset int, year *int) ([]model.Delegation, error)
-}
-
+// DelegationRepository implements DelegationRepositoryPort
 type DelegationRepository struct {
 	db *sql.DB
 }
+
+// Ensure DelegationRepository implements DelegationRepositoryPort
+var _ ports.DelegationRepositoryPort = (*DelegationRepository)(nil)
 
 func NewDelegationRepository(db *sql.DB) *DelegationRepository {
 	return &DelegationRepository{db: db}
