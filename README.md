@@ -34,7 +34,7 @@ This microservice synchronizes Tezos delegation operations from the [Tzkt API](h
 
 ### 1. Clone the repository
 ```sh
-# git clone <repo-url>  # just a placeholder - it has not been published to github
+git clone git@github.com:PaulShpilsher/tezos-delegation.git
 cd tezos-delegation
 ```
 
