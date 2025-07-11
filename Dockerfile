@@ -6,25 +6,13 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o tezos-delegation ./cmd/main.go
 
-# --- Test Stage ---
-FROM builder AS tester
-RUN go test ./...
-
-# --- Final Stage ---
-FROM alpine:latest AS final
-WORKDIR /app
-
-# Install CA certificates if needed
+# --- CA Certificates Stage ---
+FROM alpine:latest AS certs
 RUN apk --no-cache add ca-certificates
 
-# Create a non-root user
-RUN adduser -D -g '' appuser
-
-COPY --from=builder /app/tezos-delegation ./tezos-delegation
-
-# Set permissions
-RUN chown -R appuser:appuser /app
-
-USER appuser
-
+# --- Final Stage ---
+FROM scratch AS final
+WORKDIR /app
+COPY --from=builder /app/tezos-delegation /app/tezos-delegation
+COPY --from=certs /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 ENTRYPOINT ["/app/tezos-delegation"] 

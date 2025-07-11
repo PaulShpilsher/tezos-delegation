@@ -1,7 +1,8 @@
 version: '3.8'
 
 services:
-  db:
+  xtz-postgres:
+    container_name: "xtz-postgres"
     image: postgres:16
     env_file:
       - .env.docker
@@ -14,14 +15,15 @@ services:
     networks:
       - internal_net
 
-  service:
+  xtz-service:
+    container_name: "xtz-service"
     build:
       context: .
       dockerfile: Dockerfile
     env_file:
       - .env.docker
     depends_on:
-      - db
+      - xtz-postgres
     ports:
       - "3000:3000"
     restart: unless-stopped
