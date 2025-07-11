@@ -35,10 +35,24 @@ type PollerService struct {
 
 // NewPoller constructs a new Poller instance with the provided repository and logger.
 func NewPoller(repo *db.DelegationRepository, logger zerolog.Logger) *PollerService {
+	// Configure HTTP client with connection pooling and timeouts
+	transport := &http.Transport{
+		MaxIdleConns:        100,              // Maximum idle connections
+		MaxIdleConnsPerHost: 10,               // Maximum idle connections per host
+		IdleConnTimeout:     90 * time.Second, // How long to keep idle connections
+		TLSHandshakeTimeout: 10 * time.Second, // TLS handshake timeout
+		DisableCompression:  false,            // Enable compression
+	}
+
+	client := &http.Client{
+		Transport: transport,
+		Timeout:   30 * time.Second, // Set a reasonable timeout for API requests
+	}
+
 	return &PollerService{
 		repo:   repo,
-		client: &http.Client{Timeout: 30 * time.Second}, // Set a reasonable timeout for API requests
-		logger: logger.With().Str("component", "poller_service").Logger(),
+		client: client,
+		logger: logger.With().Str("component", "PollerService").Logger(),
 	}
 }
 

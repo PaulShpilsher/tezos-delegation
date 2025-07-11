@@ -24,7 +24,7 @@ var _ ports.DelegationServicePort = (*DelegationService)(nil)
 func NewDelegationService(repo ports.DelegationRepositoryPort, logger zerolog.Logger) *DelegationService {
 	return &DelegationService{
 		Repo:   repo,
-		Logger: logger.With().Str("component", "delegation_service").Logger(),
+		Logger: logger.With().Str("component", "DelegationService").Logger(),
 	}
 }
 

@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -11,6 +12,7 @@ type Config struct {
 	DBUrl      string
 	ServerPort string
 	Env        string
+	SSLMode    string
 }
 
 // LoadConfig loads configuration from environment variables.
@@ -39,19 +41,31 @@ func LoadConfig() (*Config, error) {
 		return nil, fmt.Errorf("missing required environment variables: %v", missingVars)
 	}
 
-	// Build database connection string
-	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
+	// Determine SSL mode based on environment
+	sslMode := os.Getenv("POSTGRES_SSLMODE")
+	if sslMode == "" {
+		if os.Getenv("APP_ENV") == "production" {
+			sslMode = "require"
+		} else {
+			sslMode = "disable"
+		}
+	}
+
+	// Build database connection string with SSL configuration
+	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
 		requiredVars["POSTGRES_HOST"],
 		requiredVars["POSTGRES_PORT"],
 		requiredVars["POSTGRES_USER"],
 		requiredVars["POSTGRES_PASSWORD"],
 		requiredVars["POSTGRES_DB"],
+		sslMode,
 	)
 
 	cfg := &Config{
 		DBUrl:      dsn,
 		ServerPort: os.Getenv("SERVER_PORT"),
 		Env:        os.Getenv("APP_ENV"),
+		SSLMode:    sslMode,
 	}
 
 	// Set defaults
@@ -63,4 +77,22 @@ func LoadConfig() (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// GetMaskedDBUrl returns the database URL with password masked for logging
+func (c *Config) GetMaskedDBUrl() string {
+	if c.DBUrl == "" {
+		return ""
+	}
+
+	// Simple masking - replace password with asterisks
+	parts := strings.Split(c.DBUrl, " ")
+	for i, part := range parts {
+		if strings.HasPrefix(part, "password=") {
+			parts[i] = "password=***"
+			break
+		}
+	}
+
+	return strings.Join(parts, " ")
 }

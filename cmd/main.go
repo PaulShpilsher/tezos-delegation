@@ -28,7 +28,7 @@ func main() {
 	cfg := mustLoadConfig(logger)
 
 	// --- Database Init ---
-	dbConn := mustInitDB(cfg.DBUrl, logger)
+	dbConn := mustInitDB(cfg, logger)
 	defer dbConn.Close()
 
 	// --- Service and Handler Wiring ---
@@ -68,20 +68,20 @@ func mustLoadConfig(logger zerolog.Logger) *config.Config {
 	return cfg
 }
 
-func mustInitDB(dsn string, logger zerolog.Logger) *sql.DB {
+func mustInitDB(cfg *config.Config, logger zerolog.Logger) *sql.DB {
 	const maxRetries = 10
 	const retryDelay = 1 * time.Second
 
 	var lastErr error
 	attempt := 0
 	for {
-		dbConn, err := db.NewDBConnectionFromDSN(dsn)
+		dbConn, err := db.NewDBConnectionFromDSN(cfg.DBUrl)
 		if err == nil {
-			logger.Info().Int("attempt", attempt).Msg("Database connection established successfully")
+			logger.Info().Int("attempt", attempt).Str("ssl_mode", cfg.SSLMode).Msg("Database connection established successfully")
 			return dbConn
 		}
 
-		logger.Warn().Err(err).Int("attempt", attempt).Int("maxRetries", maxRetries).Msg("Database connection attempt failed")
+		logger.Warn().Err(err).Int("attempt", attempt).Int("maxRetries", maxRetries).Str("dsn", cfg.GetMaskedDBUrl()).Msg("Database connection attempt failed")
 
 		if attempt <= maxRetries {
 			logger.Info().Int("attempt", attempt).Dur("delay", retryDelay).Msg("Retrying database connection")

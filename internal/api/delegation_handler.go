@@ -15,6 +15,7 @@ import (
 const (
 	defaultPageSize = 50
 	maxPageSize     = 1000
+	cacheTTL        = 30 * time.Second // Cache responses for 30 seconds
 )
 
 // DelegationHandler implements DelegationHandlerPort
@@ -26,7 +27,7 @@ type DelegationHandler struct {
 func NewDelegationHandler(service ports.DelegationServicePort, logger zerolog.Logger) *DelegationHandler {
 	return &DelegationHandler{
 		Service: service,
-		Logger:  logger.With().Str("component", "delegation_handler").Logger(),
+		Logger:  logger.With().Str("component", "DelegationHttpHandler").Logger(),
 	}
 }
 
@@ -34,6 +35,15 @@ func NewDelegationHandler(service ports.DelegationServicePort, logger zerolog.Lo
 func respondWithError(ctx iris.Context, status int, message string) {
 	ctx.StatusCode(status)
 	ctx.JSON(iris.Map{"error": message})
+}
+
+// logAndRespondWithError logs detailed error information but returns sanitized response
+func (h *DelegationHandler) logAndRespondWithError(ctx iris.Context, status int, userMessage, logMessage string, err error) {
+	// Log detailed error for debugging
+	h.Logger.Error().Err(err).Str("user_message", userMessage).Msg(logMessage)
+
+	// Return sanitized message to user
+	respondWithError(ctx, status, userMessage)
 }
 
 // toDelegationDto converts a model.Delegation to DelegationDto
@@ -51,9 +61,17 @@ func (h *DelegationHandler) validatePaginationParams(ctx iris.Context) (int, int
 	// Parse page parameter
 	page := 1
 	if ctx.URLParamExists("page") {
+		pageStr := ctx.URLParam("page")
+		// Validate string length to prevent resource exhaustion
+		if len(pageStr) > 10 {
+			h.Logger.Warn().Str("page", pageStr).Msg("Page parameter too long")
+			respondWithError(ctx, http.StatusBadRequest, "Invalid page parameter: too long")
+			return 0, 0, false
+		}
+
 		p, err := ctx.URLParamInt("page")
 		if err != nil || p < 1 {
-			h.Logger.Warn().Str("page", ctx.URLParam("page")).Msg("Invalid page parameter")
+			h.Logger.Warn().Str("page", pageStr).Msg("Invalid page parameter")
 			respondWithError(ctx, http.StatusBadRequest, "Invalid page parameter: must be a positive integer")
 			return 0, 0, false
 		}
@@ -63,9 +81,17 @@ func (h *DelegationHandler) validatePaginationParams(ctx iris.Context) (int, int
 	// Parse pageSize parameter
 	pageSize := defaultPageSize
 	if ctx.URLParamExists("pageSize") {
+		pageSizeStr := ctx.URLParam("pageSize")
+		// Validate string length to prevent resource exhaustion
+		if len(pageSizeStr) > 10 {
+			h.Logger.Warn().Str("pageSize", pageSizeStr).Msg("PageSize parameter too long")
+			respondWithError(ctx, http.StatusBadRequest, "Invalid pageSize parameter: too long")
+			return 0, 0, false
+		}
+
 		ps, err := ctx.URLParamInt("pageSize")
 		if err != nil || ps < 1 || ps > maxPageSize {
-			h.Logger.Warn().Str("pageSize", ctx.URLParam("pageSize")).Msg("Invalid pageSize parameter")
+			h.Logger.Warn().Str("pageSize", pageSizeStr).Msg("Invalid pageSize parameter")
 			respondWithError(ctx, http.StatusBadRequest, "Invalid pageSize parameter: must be between 1 and 1000")
 			return 0, 0, false
 		}
@@ -80,6 +106,13 @@ func (h *DelegationHandler) validateYearParam(ctx iris.Context) (*int, bool) {
 	yearStr := ctx.URLParam("year")
 	if yearStr == "" {
 		return nil, true
+	}
+
+	// Validate string length to prevent resource exhaustion
+	if len(yearStr) > 10 {
+		h.Logger.Warn().Str("year", yearStr).Msg("Year parameter too long")
+		respondWithError(ctx, http.StatusBadRequest, "Invalid year parameter: too long")
+		return nil, false
 	}
 
 	yearInt, err := strconv.Atoi(yearStr)
@@ -120,26 +153,27 @@ func (h *DelegationHandler) GetDelegations(ctx iris.Context) {
 	// Get delegations from service
 	delegations, err := h.Service.GetDelegations(ctx.Request().Context(), page, pageSize, yearPtr)
 	if err != nil {
-		// Log the error with context
-		h.Logger.Error().Err(err).Int("page", page).Int("pageSize", pageSize).Interface("year", yearPtr).Msg("Service error in GetDelegations")
-
-		// Determine appropriate HTTP status code based on error type
+		// Determine appropriate HTTP status code and message based on error type
 		var statusCode int
-		var message string
+		var userMessage string
+		var logMessage string
 
 		// Check if it's a validation error from the service
 		if apperrors.IsValidationError(err) {
 			statusCode = http.StatusBadRequest
-			message = "Invalid request parameters"
+			userMessage = "Invalid request parameters"
+			logMessage = "Validation error in GetDelegations"
 		} else if apperrors.IsDatabaseError(err) {
 			statusCode = http.StatusInternalServerError
-			message = "Database error"
+			userMessage = "Service temporarily unavailable"
+			logMessage = "Database error in GetDelegations"
 		} else {
 			statusCode = http.StatusInternalServerError
-			message = "Internal server error"
+			userMessage = "Service temporarily unavailable"
+			logMessage = "Unexpected error in GetDelegations"
 		}
 
-		respondWithError(ctx, statusCode, message)
+		h.logAndRespondWithError(ctx, statusCode, userMessage, logMessage, err)
 		return
 	}
 

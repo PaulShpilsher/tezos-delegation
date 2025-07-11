@@ -10,5 +10,13 @@ CREATE TABLE IF NOT EXISTS delegations (
     level BIGINT NOT NULL               -- Block height of the delegation
 );
 
+
+-- Add constraints for data integrity and security
+ALTER TABLE delegations ADD CONSTRAINT chk_amount_non_negative CHECK (amount >= 0);
+ALTER TABLE delegations ADD CONSTRAINT chk_level_non_negative CHECK (level >= 0);
+
+
+-- Create indexes for performance
 CREATE INDEX IF NOT EXISTS idx_timestamp_tzkt_id_desc ON delegations (timestamp DESC, tzkt_id DESC);
 CREATE INDEX IF NOT EXISTS idx_year_timestamp_tzkt_id_desc ON delegations (EXTRACT(YEAR FROM timestamp), timestamp DESC, tzkt_id DESC);
+
