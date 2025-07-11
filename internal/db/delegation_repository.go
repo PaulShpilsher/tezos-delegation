@@ -119,7 +119,7 @@ func (r *DelegationRepository) ListDelegations(ctx context.Context, limit, offse
 			`SELECT id, timestamp, amount, delegator, level, tzkt_id 
 			 FROM delegations 
 			 WHERE EXTRACT(YEAR FROM timestamp) = $1 
-			 ORDER BY timestamp DESC, level DESC 
+			 ORDER BY timestamp DESC, tzkt_id DESC 
 			 LIMIT $2 OFFSET $3`,
 			*year, limit, offset,
 		)
@@ -128,7 +128,7 @@ func (r *DelegationRepository) ListDelegations(ctx context.Context, limit, offse
 			ctx,
 			`SELECT id, timestamp, amount, delegator, level, tzkt_id 
 			 FROM delegations 
-			 ORDER BY timestamp DESC, level DESC 
+			 ORDER BY timestamp DESC, tzkt_id DESC 
 			 LIMIT $1 OFFSET $2`,
 			limit, offset,
 		)

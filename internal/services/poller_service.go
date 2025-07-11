@@ -18,8 +18,7 @@ import (
 
 const (
 	tzktBaseURL     = "https://api.tzkt.io/v1/operations/delegations"
-	pageSize        = 1000        // Tzkt max page size
-	rateLimit       = time.Second // 1 request per second
+	pageSize        = 1000 // Tzkt max page size
 	maxRetries      = 5
 	initialBackoff  = time.Second
 	maxErrorBodyLen = 4096

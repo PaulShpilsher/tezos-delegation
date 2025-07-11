@@ -63,7 +63,7 @@ func TestListDelegations(t *testing.T) {
 
 	rows := sqlmock.NewRows([]string{"id", "timestamp", "amount", "delegator", "level", "tzkt_id"}).
 		AddRow(1, fixedTime(), 100, "tz1", 1, 1)
-	mock.ExpectQuery(regexp.QuoteMeta(`SELECT id, timestamp, amount, delegator, level, tzkt_id FROM delegations ORDER BY timestamp DESC, level DESC LIMIT $1 OFFSET $2`)).
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT id, timestamp, amount, delegator, level, tzkt_id FROM delegations ORDER BY timestamp DESC, tzkt_id DESC LIMIT $1 OFFSET $2`)).
 		WithArgs(10, 0).
 		WillReturnRows(rows)
 
