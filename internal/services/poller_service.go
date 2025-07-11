@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"sync"
-	"tezos-delegation/internal/db"
 	"tezos-delegation/internal/model"
+	"tezos-delegation/internal/ports"
 
 	"github.com/rs/zerolog"
 )
@@ -27,14 +27,14 @@ const (
 
 // PollerService periodically syncs delegation data from the Tzkt API to the local database.
 type PollerService struct {
-	repo   *db.DelegationRepository // Database repository for storing delegation data
-	client *http.Client             // HTTP client for making API requests
-	wg     sync.WaitGroup           // WaitGroup to manage goroutine lifecycle
-	logger zerolog.Logger           // Structured logger for logging events and errors
+	repo   ports.DelegationRepositoryPort // Use interface for easier mocking
+	client *http.Client                   // HTTP client for making API requests
+	wg     sync.WaitGroup                 // WaitGroup to manage goroutine lifecycle
+	logger zerolog.Logger                 // Structured logger for logging events and errors
 }
 
 // NewPoller constructs a new Poller instance with the provided repository and logger.
-func NewPoller(repo *db.DelegationRepository, logger zerolog.Logger) *PollerService {
+func NewPoller(repo ports.DelegationRepositoryPort, logger zerolog.Logger) *PollerService {
 	// Configure HTTP client with connection pooling and timeouts
 	transport := &http.Transport{
 		MaxIdleConns:        100,              // Maximum idle connections
