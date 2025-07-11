@@ -56,7 +56,7 @@ func main() {
 }
 
 func setupLogger() zerolog.Logger {
-	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
+	zerolog.TimeFieldFormat = time.RFC3339
 	return zerolog.New(os.Stdout).With().Timestamp().Logger()
 }
 
