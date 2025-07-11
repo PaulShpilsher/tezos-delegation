@@ -17,7 +17,7 @@ func TestDelegationService_GetDelegations(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	repo := mocks.NewMockDelegationRepositoryInterface(ctrl)
+	repo := mocks.NewMockDelegationRepositoryPort(ctrl)
 	logger := zerolog.Nop()
 	service := NewDelegationService(repo, logger)
 

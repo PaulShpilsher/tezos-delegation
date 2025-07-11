@@ -15,18 +15,21 @@ const (
 	maxPageSize     = 1000
 )
 
-// DelegationHandlerInterface defines the contract for delegation HTTP handlers
-type DelegationHandlerInterface interface {
+// DelegationHandlerPort defines the contract for delegation HTTP handlers
+type DelegationHandlerPort interface {
 	GetDelegations(ctx iris.Context)
 }
 
 type DelegationHandler struct {
-	Service services.DelegationServiceInterface
+	Service services.DelegationServicePort
 	Logger  zerolog.Logger
 }
 
-func NewDelegationHandler(service services.DelegationServiceInterface, logger zerolog.Logger) *DelegationHandler {
-	return &DelegationHandler{Service: service, Logger: logger}
+func NewDelegationHandler(service services.DelegationServicePort, logger zerolog.Logger) *DelegationHandler {
+	return &DelegationHandler{
+		Service: service,
+		Logger:  logger.With().Str("component", "delegation_handler").Logger(),
+	}
 }
 
 func respondWithError(ctx iris.Context, status int, message string) {

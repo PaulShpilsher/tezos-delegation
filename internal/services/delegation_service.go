@@ -9,18 +9,20 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// DelegationServiceInterface defines the contract for delegation business logic
-type DelegationServiceInterface interface {
+// DelegationServicePort defines the contract for delegation business logic
+type DelegationServicePort interface {
 	GetDelegations(ctx context.Context, pageNo, pageSize int, year *int) ([]model.Delegation, error)
 }
 
 type DelegationService struct {
-	Repo   db.DelegationRepositoryInterface
+	Repo   db.DelegationRepositoryPort
 	Logger zerolog.Logger
 }
 
-func NewDelegationService(repo db.DelegationRepositoryInterface, logger zerolog.Logger) *DelegationService {
-	return &DelegationService{Repo: repo, Logger: logger}
+func NewDelegationService(repo db.DelegationRepositoryPort, logger zerolog.Logger) *DelegationService {
+	return &DelegationService{
+		Repo:   repo,
+		Logger: logger.With().Str("component", "delegation_service").Logger()}
 }
 
 // GetDelegations returns delegations with pagination and optional year filter.

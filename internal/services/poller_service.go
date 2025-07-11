@@ -26,59 +26,67 @@ const (
 	maxTotalWait    = 2 * time.Minute
 )
 
-// Poller periodically syncs delegation data from the Tzkt API to the local database.
-type Poller struct {
-	repo   *db.DelegationRepository
-	client *http.Client
-	wg     sync.WaitGroup
-	logger zerolog.Logger
+// PollerService periodically syncs delegation data from the Tzkt API to the local database.
+type PollerService struct {
+	repo   *db.DelegationRepository // Database repository for storing delegation data
+	client *http.Client             // HTTP client for making API requests
+	wg     sync.WaitGroup           // WaitGroup to manage goroutine lifecycle
+	logger zerolog.Logger           // Structured logger for logging events and errors
 }
 
-func NewPoller(repo *db.DelegationRepository, logger zerolog.Logger) *Poller {
-	return &Poller{
+// NewPoller constructs a new Poller instance with the provided repository and logger.
+func NewPoller(repo *db.DelegationRepository, logger zerolog.Logger) *PollerService {
+	return &PollerService{
 		repo:   repo,
-		client: &http.Client{Timeout: 30 * time.Second},
-		logger: logger,
+		client: &http.Client{Timeout: 30 * time.Second}, // Set a reasonable timeout for API requests
+		logger: logger.With().Str("component", "poller_service").Logger(),
 	}
 }
 
+// tzktDelegation represents the structure of a delegation operation returned by the Tzkt API.
 type tzktDelegation struct {
-	ID        int64     `json:"id"`
-	Timestamp time.Time `json:"timestamp"`
-	Amount    int64     `json:"amount"`
+	ID        int64     `json:"id"`        // Unique operation ID in Tzkt
+	Timestamp time.Time `json:"timestamp"` // Time of the delegation operation
+	Amount    int64     `json:"amount"`    // Amount delegated (mutez)
 	Sender    struct {
-		Address string `json:"address"`
+		Address string `json:"address"` // Delegator's address
 	} `json:"sender"`
-	Level int64 `json:"level"`
+	Level int64 `json:"level"` // Block level of the operation
 }
 
-func (p *Poller) Start(ctx context.Context) {
+// Start launches the poller in a new goroutine, beginning the sync and poll process.
+// The context is used for cancellation and shutdown.
+func (p *PollerService) Start(ctx context.Context) {
 	p.wg.Add(1)
 	go p.syncAndPoll(ctx)
 }
 
-// Wait blocks until the poller has fully stopped.
-func (p *Poller) Wait() {
+// Wait blocks until the poller has fully stopped (i.e., the goroutine has exited).
+func (p *PollerService) Wait() {
 	p.wg.Wait()
 }
 
 // syncAndPoll first downloads all historical data as fast as possible (rate-limited),
 // then switches to periodic polling for new data every minute, catching up if behind.
-func (p *Poller) syncAndPoll(ctx context.Context) {
+func (p *PollerService) syncAndPoll(ctx context.Context) {
 	defer p.wg.Done()
 	// 1. Historical sync: fast as possible within rate limits
 	p.logger.Info().Str("phase", "historical_sync").Msg("syncing historical data")
 	for {
+		// Attempt to fetch and store a batch of delegations
 		caughtUp, err := p.syncDelegationsBatch(ctx)
 		if err != nil {
+			// If the context was cancelled, log and exit immediately
 			if ctx.Err() != nil {
 				p.logger.Error().Err(err).Str("phase", "historical_sync").Msg("context cancelled during historical sync, exiting")
 				return
 			}
+			// Log the error and retry after a short delay
 			p.logger.Error().Err(err).Str("phase", "historical_sync").Msg("error during historical sync")
-			time.Sleep(500 * time.Millisecond)
+			time.Sleep(time.Second)
 			continue
 		}
+		// If caught up (no more historical data), break out of the loop
 		if caughtUp {
 			break
 		}
@@ -86,13 +94,15 @@ func (p *Poller) syncAndPoll(ctx context.Context) {
 
 	// 2. Polling: every minute, but catch up if behind
 	p.logger.Info().Msg("caught up. Polling for new data...")
-	ticker := time.NewTicker(time.Minute)
+	ticker := time.NewTicker(time.Minute) // Poll every minute
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
+			// Context cancelled: exit polling loop
 			return
 		case <-ticker.C:
+			// On each tick, try to catch up (in case multiple batches are needed)
 			for {
 				caughtUp, err := p.syncDelegationsBatch(ctx)
 				if err != nil {
@@ -112,41 +122,43 @@ func (p *Poller) syncAndPoll(ctx context.Context) {
 	}
 }
 
-func (p *Poller) syncDelegationsBatch(ctx context.Context) (bool, error) {
+// syncDelegationsBatch fetches a batch of new delegations from Tzkt and stores them in the database.
+// Returns (caughtUp, error): caughtUp is true if there are no more new delegations to fetch.
+func (p *PollerService) syncDelegationsBatch(ctx context.Context) (bool, error) {
 	if ctx.Err() != nil {
 		return false, ctx.Err()
 	}
 
-	// Get last stored delegation TzktID
+	// Get last stored delegation TzktID from the database to avoid duplicates
 	lastTzktID, err := p.repo.GetLatestTzktID(ctx)
 	if err != nil {
 		return false, fmt.Errorf("error getting latest TzktID from database: %w", err)
 	}
 
-	p.logger.Info().Int64("latest_tzkt_id", lastTzktID).Msg("fetching delegations with latest TzktID")
-
-	// Get a block of delegations from Tzkt API
+	// Fetch a batch of delegations from the Tzkt API, starting after lastTzktID
 	delegations, err := p.fetchDelegationBatch(ctx, lastTzktID)
 	if err != nil {
 		return false, fmt.Errorf("error fetching delegations from tzkt: %w", err)
 	}
 
-	p.logger.Info().Int("fetched_delegations_count", len(delegations)).Msg("fetched delegations")
+	p.logger.Info().Int("fetched_delegations_count", len(delegations))
 	if len(delegations) == 0 {
-		return true, nil // caught up
+		return true, nil // caught up: no new delegations
 	}
 
-	// Convert []model.Delegation to []*model.Delegation
+	// Convert []model.Delegation to []*model.Delegation for database insertion
 	delegationPtrs := make([]*model.Delegation, len(delegations))
 	for i := range delegations {
 		delegationPtrs[i] = &delegations[i]
 	}
 
+	// Insert the new delegations into the database
 	err = p.repo.InsertDelegations(delegationPtrs)
 	if err != nil {
 		return false, fmt.Errorf("error storing delegations to database: %w", err)
 	}
-	return len(delegations) < pageSize, nil // caught up if less than a full page
+	// If less than a full page was fetched, we're caught up; otherwise, there may be more
+	return len(delegations) < pageSize, nil
 }
 
 // fetchDelegationBatch fetches a batch of delegations from the Tzkt API, handling rate limits, server errors, and retries.
@@ -156,7 +168,8 @@ func (p *Poller) syncDelegationsBatch(ctx context.Context) (bool, error) {
 // - Fails fast on other non-200 status codes, logging the response body for diagnostics.
 // - Enforces a maximum number of retries and a maximum total wait time.
 // - All network and retry waits are cancellable via the provided context.
-func (p *Poller) fetchDelegationBatch(ctx context.Context, lastID int64) ([]model.Delegation, error) {
+func (p *PollerService) fetchDelegationBatch(ctx context.Context, lastID int64) ([]model.Delegation, error) {
+	// Construct the Tzkt API URL with pagination (id.gt=lastID)
 	url := fmt.Sprintf("%s?limit=%d&id.gt=%d", tzktBaseURL, pageSize, lastID)
 
 	var resp *http.Response
@@ -173,6 +186,7 @@ retryLoop:
 		}
 		resp, err = p.client.Do(req)
 		if err != nil {
+			// Network error or context cancellation
 			return nil, err
 		}
 
@@ -234,7 +248,7 @@ retryLoop:
 		return nil, fmt.Errorf("error decoding response body: %w", err)
 	}
 
-	// Convert to model.Delegation slice
+	// Convert to model.Delegation slice for database storage
 	delegations := make([]model.Delegation, len(result))
 	for i, op := range result {
 		delegations[i] = model.Delegation{

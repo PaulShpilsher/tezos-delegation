@@ -18,7 +18,7 @@ func TestDelegationHandler_GetDelegations(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	service := mocks.NewMockDelegationServiceInterface(ctrl)
+	service := mocks.NewMockDelegationServicePort(ctrl)
 	logger := zerolog.Nop()
 	handler := NewDelegationHandler(service, logger)
 
@@ -39,7 +39,7 @@ func TestDelegationHandler_GetDelegations_OptionalQueryParams(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	service := mocks.NewMockDelegationServiceInterface(ctrl)
+	service := mocks.NewMockDelegationServicePort(ctrl)
 	logger := zerolog.Nop()
 	handler := NewDelegationHandler(service, logger)
 
@@ -77,7 +77,7 @@ func TestDelegationHandler_GetDelegations_ErrorConditions(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	service := mocks.NewMockDelegationServiceInterface(ctrl)
+	service := mocks.NewMockDelegationServicePort(ctrl)
 	logger := zerolog.Nop()
 	handler := NewDelegationHandler(service, logger)
 
@@ -112,7 +112,7 @@ func TestDelegationHandler_GetDelegations_EdgeCases(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	service := mocks.NewMockDelegationServiceInterface(ctrl)
+	service := mocks.NewMockDelegationServicePort(ctrl)
 	logger := zerolog.Nop()
 	handler := NewDelegationHandler(service, logger)
 
@@ -128,14 +128,14 @@ func TestDelegationHandler_GetDelegations_EdgeCases(t *testing.T) {
 
 	t.Run("large page number", func(t *testing.T) {
 		service.EXPECT().GetDelegations(gomock.Any(), 9999, gomock.Any(), gomock.Any()).Return([]model.Delegation{}, nil)
-		resp := test.GET("/xtz/delegations?page=9999").Expect().Status(200).JSON().Object()
+		resp := test.GET("/xtz/delegations").WithQueryString("page=9999").Expect().Status(200).JSON().Object()
 		resp.Value("data").Array().IsEmpty()
 	})
 
 	t.Run("year with no data", func(t *testing.T) {
 		year := 1999
 		service.EXPECT().GetDelegations(gomock.Any(), 1, gomock.Any(), &year).Return([]model.Delegation{}, nil)
-		resp := test.GET("/xtz/delegations?year=1999").Expect().Status(200).JSON().Object()
+		resp := test.GET("/xtz/delegations").WithQueryString("year=1999").Expect().Status(200).JSON().Object()
 		resp.Value("data").Array().IsEmpty()
 	})
 }

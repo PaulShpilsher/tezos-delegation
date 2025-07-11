@@ -94,7 +94,7 @@ func startHTTPServer(app *iris.Application, port string, logger zerolog.Logger) 
 	}
 }
 
-func waitForShutdown(quit <-chan os.Signal, app *iris.Application, pollerService *services.Poller, cancelPoller context.CancelFunc, logger zerolog.Logger) {
+func waitForShutdown(quit <-chan os.Signal, app *iris.Application, pollerService *services.PollerService, cancelPoller context.CancelFunc, logger zerolog.Logger) {
 	<-quit
 	app.Logger().Info("Shutting down server...")
 
