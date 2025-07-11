@@ -69,11 +69,31 @@ func mustLoadConfig(logger zerolog.Logger) *config.Config {
 }
 
 func mustInitDB(dsn string, logger zerolog.Logger) *sql.DB {
-	dbConn, err := db.NewDBConnectionFromDSN(dsn)
-	if err != nil {
-		logger.Fatal().Err(err).Msg("Database connection error")
+	const maxRetries = 10
+	const retryDelay = 1 * time.Second
+
+	var lastErr error
+	attempt := 0
+	for {
+		dbConn, err := db.NewDBConnectionFromDSN(dsn)
+		if err == nil {
+			logger.Info().Int("attempt", attempt).Msg("Database connection established successfully")
+			return dbConn
+		}
+
+		logger.Warn().Err(err).Int("attempt", attempt).Int("maxRetries", maxRetries).Msg("Database connection attempt failed")
+
+		if attempt <= maxRetries {
+			logger.Info().Int("attempt", attempt).Dur("delay", retryDelay).Msg("Retrying database connection")
+			time.Sleep(retryDelay)
+			attempt++
+			continue
+		}
+		logger.Fatal().Err(lastErr).Msg("Database connection error after all retries")
+
 	}
-	return dbConn
+
+	// This should never be reached
 }
 
 func setupHTTPServer(delegationHandler *api.DelegationHandler) *iris.Application {
