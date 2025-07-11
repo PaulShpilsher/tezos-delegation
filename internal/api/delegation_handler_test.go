@@ -87,24 +87,24 @@ func TestDelegationHandler_GetDelegations_ErrorConditions(t *testing.T) {
 
 	t.Run("invalid page", func(t *testing.T) {
 		resp := test.GET("/xtz/delegations").WithQueryString("page=abc").Expect().Status(400).JSON().Object()
-		resp.Value("error").String().IsEqual("invalid page parameter")
+		resp.Value("error").String().IsEqual("Invalid page parameter: must be a positive integer")
 	})
 	t.Run("invalid year", func(t *testing.T) {
 		resp := test.GET("/xtz/delegations").WithQueryString("year=bad").Expect().Status(400).JSON().Object()
-		resp.Value("error").String().IsEqual("invalid year parameter")
+		resp.Value("error").String().IsEqual("Invalid year parameter")
 	})
 	t.Run("negative page", func(t *testing.T) {
 		resp := test.GET("/xtz/delegations").WithQueryString("page=-1").Expect().Status(400).JSON().Object()
-		resp.Value("error").String().IsEqual("invalid page parameter")
+		resp.Value("error").String().IsEqual("Invalid page parameter: must be a positive integer")
 	})
 	t.Run("negative year", func(t *testing.T) {
 		resp := test.GET("/xtz/delegations").WithQueryString("year=-5").Expect().Status(400).JSON().Object()
-		resp.Value("error").String().IsEqual("invalid year parameter")
+		resp.Value("error").String().IsEqual("Invalid year parameter")
 	})
 	t.Run("service error", func(t *testing.T) {
 		service.EXPECT().GetDelegations(gomock.Any(), 1, gomock.Any(), gomock.Any()).Return(nil, assert.AnError)
 		resp := test.GET("/xtz/delegations").Expect().Status(500).JSON().Object()
-		resp.Value("error").String().IsEqual("internal server error")
+		resp.Value("error").String().IsEqual("Internal server error")
 	})
 }
 
@@ -133,9 +133,9 @@ func TestDelegationHandler_GetDelegations_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("year with no data", func(t *testing.T) {
-		year := 1999
+		year := 2019
 		service.EXPECT().GetDelegations(gomock.Any(), 1, gomock.Any(), &year).Return([]model.Delegation{}, nil)
-		resp := test.GET("/xtz/delegations").WithQueryString("year=1999").Expect().Status(200).JSON().Object()
+		resp := test.GET("/xtz/delegations").WithQueryString("year=2019").Expect().Status(200).JSON().Object()
 		resp.Value("data").Array().IsEmpty()
 	})
 }

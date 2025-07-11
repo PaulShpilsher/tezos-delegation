@@ -86,9 +86,9 @@ func (h *DelegationHandler) validateYearParam(ctx iris.Context) (*int, bool) {
 	}
 
 	yearInt, err := strconv.Atoi(yearStr)
-	if err != nil || yearInt < 2000 || yearInt > 2100 {
+	if err != nil || yearInt < 2018 {
 		h.Logger.Warn().Str("year", yearStr).Msg("Invalid year parameter")
-		respondWithError(ctx, http.StatusBadRequest, "Invalid year parameter: must be between 2000 and 2100")
+		respondWithError(ctx, http.StatusBadRequest, "Invalid year parameter")
 		return nil, false
 	}
 
