@@ -100,11 +100,10 @@ func (h *DelegationHandler) validateYearParam(ctx iris.Context) (*int, bool) {
 // @Summary Get delegations with pagination and optional year filter
 // @Description Retrieves a paginated list of Tezos delegations with optional year filtering
 // @Tags delegations
-// @Accept json
 // @Produce json
 // @Param page query int false "Page number (default: 1)" minimum(1)
 // @Param pageSize query int false "Number of items per page (default: 50, max: 1000)" minimum(1) maximum(1000)
-// @Param year query int false "Filter by year (optional)"
+// @Param year query int false "Filter by year (optional) minimum(2018)"
 // @Success 200 {object} GetDelegationsResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
