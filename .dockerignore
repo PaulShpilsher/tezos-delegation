@@ -1,0 +1,27 @@
+# Exclude all .env files
+.env*
+
+# Go build/cache
+bin/
+obj/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# VCS
+.git
+.gitignore
+
+# Dependency directories
+vendor/
+
+# IDE/editor files
+*.swp
+*.swo
+*.idea/
+*.vscode/
+.DS_Store 
