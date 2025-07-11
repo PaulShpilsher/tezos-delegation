@@ -126,22 +126,22 @@ func (p *PollerService) syncAndPoll(ctx context.Context) {
 // Returns (caughtUp, error): caughtUp is true if there are no more new delegations to fetch.
 func (p *PollerService) syncDelegationsBatch(ctx context.Context) (bool, error) {
 	if ctx.Err() != nil {
-		return false, ctx.Err()
+		return false, fmt.Errorf("context cancelled: %w", ctx.Err())
 	}
 
 	// Get last stored delegation TzktID from the database to avoid duplicates
 	lastTzktID, err := p.repo.GetLatestTzktID(ctx)
 	if err != nil {
-		return false, fmt.Errorf("error getting latest TzktID from database: %w", err)
+		return false, fmt.Errorf("failed to get latest TzktID from database: %w", err)
 	}
 
 	// Fetch a batch of delegations from the Tzkt API, starting after lastTzktID
 	delegations, err := p.fetchDelegationBatch(ctx, lastTzktID)
 	if err != nil {
-		return false, fmt.Errorf("error fetching delegations from tzkt: %w", err)
+		return false, fmt.Errorf("failed to fetch delegations from Tzkt API: %w", err)
 	}
 
-	p.logger.Info().Int("fetched_delegations_count", len(delegations))
+	p.logger.Info().Int("fetched_delegations_count", len(delegations)).Int64("last_tzkt_id", lastTzktID).Msg("Fetched delegation batch")
 	if len(delegations) == 0 {
 		return true, nil // caught up: no new delegations
 	}
@@ -155,8 +155,9 @@ func (p *PollerService) syncDelegationsBatch(ctx context.Context) (bool, error) 
 	// Insert the new delegations into the database
 	err = p.repo.InsertDelegations(delegationPtrs)
 	if err != nil {
-		return false, fmt.Errorf("error storing delegations to database: %w", err)
+		return false, fmt.Errorf("failed to store delegations to database: %w", err)
 	}
+
 	// If less than a full page was fetched, we're caught up; otherwise, there may be more
 	return len(delegations) < pageSize, nil
 }

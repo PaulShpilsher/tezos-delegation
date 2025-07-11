@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -48,7 +49,6 @@ func TestLoadConfig_Success(t *testing.T) {
 
 	cfg, err := LoadConfig()
 	assert.NoError(t, err)
-	assert.Equal(t, "localhost", vars["POSTGRES_HOST"])
 	assert.Contains(t, cfg.DBUrl, "host=localhost")
 	assert.Contains(t, cfg.DBUrl, "port=5432")
 	assert.Contains(t, cfg.DBUrl, "user=user")
@@ -92,14 +92,35 @@ func TestLoadConfig_MissingRequiredEnv(t *testing.T) {
 		defer cleanup()
 		os.Unsetenv(missing)
 
-		func() {
-			defer func() {
-				if r := recover(); r == nil {
-					t.Errorf("expected panic for missing %s", missing)
-				}
-			}()
-			LoadConfig()
-		}()
+		cfg, err := LoadConfig()
+		assert.Error(t, err)
+		assert.Nil(t, cfg)
+		assert.True(t, strings.Contains(err.Error(), "missing required environment variables"))
+		assert.True(t, strings.Contains(err.Error(), missing))
 		cleanup()
 	}
+}
+
+func TestLoadConfig_MultipleMissingEnv(t *testing.T) {
+	// Test with multiple missing environment variables
+	vars := map[string]string{
+		"POSTGRES_HOST": "localhost",
+		// Missing: POSTGRES_PORT, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB
+	}
+	cleanup := setEnvVars(vars)
+	defer cleanup()
+	os.Unsetenv("POSTGRES_PORT")
+	os.Unsetenv("POSTGRES_USER")
+	os.Unsetenv("POSTGRES_PASSWORD")
+	os.Unsetenv("POSTGRES_DB")
+
+	cfg, err := LoadConfig()
+	assert.Error(t, err)
+	assert.Nil(t, cfg)
+	assert.True(t, strings.Contains(err.Error(), "missing required environment variables"))
+	// Should contain all missing variables
+	assert.True(t, strings.Contains(err.Error(), "POSTGRES_PORT"))
+	assert.True(t, strings.Contains(err.Error(), "POSTGRES_USER"))
+	assert.True(t, strings.Contains(err.Error(), "POSTGRES_PASSWORD"))
+	assert.True(t, strings.Contains(err.Error(), "POSTGRES_DB"))
 }

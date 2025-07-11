@@ -13,31 +13,40 @@ type Config struct {
 	Env        string
 }
 
+// LoadConfig loads configuration from environment variables.
+// Returns an error if required environment variables are missing.
 func LoadConfig() (*Config, error) {
 	_ = godotenv.Load()
 
-	host := os.Getenv("POSTGRES_HOST")
-	if host == "" {
-		panic("POSTGRES_HOST environment variable is required")
-	}
-	port := os.Getenv("POSTGRES_PORT")
-	if port == "" {
-		panic("POSTGRES_PORT environment variable is required")
-	}
-	user := os.Getenv("POSTGRES_USER")
-	if user == "" {
-		panic("POSTGRES_USER environment variable is required")
-	}
-	password := os.Getenv("POSTGRES_PASSWORD")
-	if password == "" {
-		panic("POSTGRES_PASSWORD environment variable is required")
-	}
-	dbname := os.Getenv("POSTGRES_DB")
-	if dbname == "" {
-		panic("POSTGRES_DB environment variable is required")
+	// Validate required environment variables
+	requiredVars := map[string]string{
+		"POSTGRES_HOST":     os.Getenv("POSTGRES_HOST"),
+		"POSTGRES_PORT":     os.Getenv("POSTGRES_PORT"),
+		"POSTGRES_USER":     os.Getenv("POSTGRES_USER"),
+		"POSTGRES_PASSWORD": os.Getenv("POSTGRES_PASSWORD"),
+		"POSTGRES_DB":       os.Getenv("POSTGRES_DB"),
 	}
 
-	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", host, port, user, password, dbname)
+	// Check for missing required variables
+	var missingVars []string
+	for name, value := range requiredVars {
+		if value == "" {
+			missingVars = append(missingVars, name)
+		}
+	}
+
+	if len(missingVars) > 0 {
+		return nil, fmt.Errorf("missing required environment variables: %v", missingVars)
+	}
+
+	// Build database connection string
+	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
+		requiredVars["POSTGRES_HOST"],
+		requiredVars["POSTGRES_PORT"],
+		requiredVars["POSTGRES_USER"],
+		requiredVars["POSTGRES_PASSWORD"],
+		requiredVars["POSTGRES_DB"],
+	)
 
 	cfg := &Config{
 		DBUrl:      dsn,
@@ -45,8 +54,9 @@ func LoadConfig() (*Config, error) {
 		Env:        os.Getenv("APP_ENV"),
 	}
 
+	// Set defaults
 	if cfg.ServerPort == "" {
-		cfg.ServerPort = "3000" // default
+		cfg.ServerPort = "3000"
 	}
 	if cfg.Env == "" {
 		cfg.Env = "development"

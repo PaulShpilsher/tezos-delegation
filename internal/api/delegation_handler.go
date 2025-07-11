@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 	"strconv"
+	"tezos-delegation/internal/apperrors"
 	"tezos-delegation/internal/model"
 	"tezos-delegation/internal/services"
 	"time"
@@ -33,7 +34,7 @@ func NewDelegationHandler(service services.DelegationServicePort, logger zerolog
 	}
 }
 
-// respondWithError sends a consistent error response
+// respondWithError sends a consistent error response with proper status code
 func respondWithError(ctx iris.Context, status int, message string) {
 	ctx.StatusCode(status)
 	ctx.JSON(iris.Map{"error": message})
@@ -88,7 +89,7 @@ func (h *DelegationHandler) validateYearParam(ctx iris.Context) (*int, bool) {
 	yearInt, err := strconv.Atoi(yearStr)
 	if err != nil || yearInt < 2018 {
 		h.Logger.Warn().Str("year", yearStr).Msg("Invalid year parameter")
-		respondWithError(ctx, http.StatusBadRequest, "Invalid year parameter")
+		respondWithError(ctx, http.StatusBadRequest, "Invalid year parameter: must be a valid year from 2018 onwards")
 		return nil, false
 	}
 
@@ -124,8 +125,26 @@ func (h *DelegationHandler) GetDelegations(ctx iris.Context) {
 	// Get delegations from service
 	delegations, err := h.Service.GetDelegations(ctx.Request().Context(), page, pageSize, yearPtr)
 	if err != nil {
-		h.Logger.Error().Err(err).Int("page", page).Int("pageSize", pageSize).Msg("Service error in GetDelegations")
-		respondWithError(ctx, http.StatusInternalServerError, "Internal server error")
+		// Log the error with context
+		h.Logger.Error().Err(err).Int("page", page).Int("pageSize", pageSize).Interface("year", yearPtr).Msg("Service error in GetDelegations")
+
+		// Determine appropriate HTTP status code based on error type
+		var statusCode int
+		var message string
+
+		// Check if it's a validation error from the service
+		if apperrors.IsValidationError(err) {
+			statusCode = http.StatusBadRequest
+			message = "Invalid request parameters"
+		} else if apperrors.IsDatabaseError(err) {
+			statusCode = http.StatusInternalServerError
+			message = "Database error"
+		} else {
+			statusCode = http.StatusInternalServerError
+			message = "Internal server error"
+		}
+
+		respondWithError(ctx, statusCode, message)
 		return
 	}
 
